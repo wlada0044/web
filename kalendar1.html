@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<title>Kalendář – krátký/dlouhý týden + události</title>
+<style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    input, button, select { padding: 8px; font-size: 16px; margin: 5px 0; }
+    button { cursor: pointer; }
+    #vysledek { margin-top: 20px; font-size: 22px; font-weight: bold; }
+    #udalosti { margin-top: 15px; font-size: 18px; white-space: pre-line; }
+    table { border-collapse: collapse; margin-top: 20px; }
+    td, th { border: 1px solid #ccc; padding: 8px; text-align: center; width: 40px; }
+    .event-day { background-color: #ffeb99; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<h2>Krátký / Dlouhý týden + Události</h2>
+
+<h3>Zjistit týden</h3>
+<label>Vyber datum:</label><br>
+<input type="date" id="datum">
+<button onclick="spocitej()">Zjistit</button>
+
+<div id="vysledek"></div>
+<div id="udalosti"></div>
+
+<hr>
+
+<h3>Přidat / Upravit událost</h3>
+<label>Název události:</label><br>
+<input type="text" id="nazev" placeholder="Např. doktor, meeting..."><br>
+
+<label>Datum události:</label><br>
+<input type="date" id="datumUdalosti"><br>
+
+<input type="hidden" id="editIndex">
+
+<button onclick="ulozitUdalost()">Uložit událost</button>
+
+<hr>
+
+<h3>Měsíční přehled</h3>
+<label>Měsíc:</label>
+<select id="mesic">
+    <script>
+        for (let i = 0; i < 12; i++) {
+            document.write(`<option value="${i}">${i+1}</option>`);
+        }
+    </script>
+</select>
+
+<label>Rok:</label>
+<select id="rok">
+    <script>
+        const r = new Date().getFullYear();
+        for (let i = r - 5; i <= r + 5; i++) {
+            document.write(`<option value="${i}">${i}</option>`);
+        }
+    </script>
+</select>
+
+<button onclick="zobrazMesic()">Zobrazit měsíc</button>
+
+<div id="mesicniKalendar"></div>
+
+<script>
+// Výpočet čísla týdne ISO
+function tyden(d) {
+    const datum = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const den = datum.getUTCDay() || 7;
+    datum.setUTCDate(datum.getUTCDate() + 4 - den);
+    const zacatek = new Date(Date.UTC(datum.getUTCFullYear(), 0, 1));
+    return Math.ceil((((datum - zacatek) / 86400000) + 1) / 7);
+}
+
+// Uložení nebo editace události
+function ulozitUdalost() {
+    const nazev = document.getElementById("nazev").value.trim();
+    const datum = document.getElementById("datumUdalosti").value;
+    const editIndex = document.getElementById("editIndex").value;
+
+    if (!nazev || !datum) {
+        alert("Vyplň název i datum události.");
+        return;
+    }
+
+    const udalosti = JSON.parse(localStorage.getItem("udalosti")) || [];
+
+    if (editIndex !== "") {
+        udalosti[editIndex] = { nazev, datum };
+        alert("Událost upravena.");
+    } else {
+        udalosti.push({ nazev, datum });
+        alert("Událost přidána.");
+    }
+
+    localStorage.setItem("udalosti", JSON.stringify(udalosti));
+
+    document.getElementById("nazev").value = "";
+    document.getElementById("datumUdalosti").value = "";
+    document.getElementById("editIndex").value = "";
+
+    zobrazMesic();
+}
+
+// Zobrazení týdne + událostí
+function spocitej() {
+    const datum = new Date(document.getElementById('datum').value);
+    if (isNaN(datum)) {
+        document.getElementById('vysledek').innerText = "Vyber prosím platné datum.";
+        return;
+    }
+
+    const cisloTydne = tyden(datum);
+    const jeKratky = cisloTydne % 2 === 1;
+
+    document.getElementById('vysledek').innerText =
+        "Týden " + cisloTydne + " je: " + (jeKratky ? "KRÁTKÝ (st+čt směna)" : "DLOUHÝ (st+čt volno)");
+
+    zobrazUdalostiVTydnu(cisloTydne);
+}
+
+function zobrazUdalostiVTydnu(cisloTydne) {
+    const udalosti = JSON.parse(localStorage.getItem("udalosti")) || [];
+    const udalostiVTydnu = udalosti.filter(u => tyden(new Date(u.datum)) === cisloTydne);
+
+    if (udalostiVTydnu.length === 0) {
+        document.getElementById("udalosti").innerText = "V tomto týdnu nejsou žádné události.";
+    } else {
+        let text = "Události v tomto týdnu:\n";
+        udalostiVTydnu.forEach((u, i) => {
+            text += `• ${u.nazev} (${u.datum})\n`;
+        });
+        document.getElementById("udalosti").innerText = text;
+    }
+}
+
+// Měsíční přehled
+function zobrazMesic() {
+    const mesic = parseInt(document.getElementById("mesic").value);
+    const rok = parseInt(document.getElementById("rok").value);
+    const udalosti = JSON.parse(localStorage.getItem("udalosti")) || [];
+
+    const prvniDen = new Date(rok, mesic, 1);
+    const posledniDen = new Date(rok, mesic + 1, 0);
+
+    let html = "<table><tr>";
+    const dny = ["Po", "Út", "St", "Čt", "Pá", "So", "Ne"];
+    dny.forEach(d => html += `<th>${d}</th>`);
+    html += "</tr><tr>";
+
+    let denVTydnu = prvniDen.getDay();
+    if (denVTydnu === 0) denVTydnu = 7;
+
+    for (let i = 1; i < denVTydnu; i++) html += "<td></td>";
+
+    for (let d = 1; d <= posledniDen.getDate(); d++) {
+        const datum = `${rok}-${String(mesic+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const maUdalost = udalosti.some(u => u.datum === datum);
+
+        html += `<td class="${maUdalost ? 'event-day' : ''}" onclick="klikDen('${datum}')">${d}</td>`;
+
+        if ((denVTydnu + d - 1) % 7 === 0) html += "</tr><tr>";
+    }
+
+    html += "</tr></table>";
+    document.getElementById("mesicniKalendar").innerHTML = html;
+}
+
+function klikDen(datum) {
+    document.getElementById("datum").value = datum;
+    spocitej();
+}
+</script>
+
+</body>
+</html>
